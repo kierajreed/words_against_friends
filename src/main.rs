@@ -2,8 +2,11 @@ use futures::stream::StreamExt;
 use std::env;
 use twilight_gateway::{Event, EventTypeFlags, Intents, Shard};
 
+mod criteria;
 mod discord;
 mod game;
+mod round;
+mod words;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
