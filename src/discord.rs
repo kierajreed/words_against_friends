@@ -1,12 +1,13 @@
 use std::collections::HashMap;
-use twilight_model::{channel::Message, id::{marker::{ChannelMarker, GuildMarker, MessageMarker}, Id}};
+use tokio::time::{sleep, Duration};
+use twilight_model::{channel::Message, id::{marker::{ChannelMarker, GuildMarker, MessageMarker, UserMarker}, Id}};
 use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType, Response, response::marker::EmptyBody};
-use crate::game::{WordsAgainstStrangers, GameState};
+use crate::{game::{WordsAgainstStrangers, GameState}, round::WordResult};
 
 pub struct DiscordBot {
   prefix: String,
   games: HashMap<Id<GuildMarker>, WordsAgainstStrangers>,
-  dm_to_guild: HashMap<Id<ChannelMarker>, Id<GuildMarker>>,
+  dm_to_guild: HashMap<Id<UserMarker>, Id<GuildMarker>>,
   client: HttpClient,
 }
 
@@ -21,7 +22,20 @@ impl DiscordBot {
   }
 
   pub async fn handle_message(&mut self, message: Message) {
-    if message.content.starts_with(&self.prefix) {
+    if self.dm_to_guild.contains_key(&message.author.id) && message.guild_id.is_none() {
+      let guild_id = self.dm_to_guild.get(&message.author.id).unwrap();
+      let relevant_game = self.games.get_mut(guild_id).unwrap();
+      let result = relevant_game.receive_word(message.author.id, message.content.clone());
+      let reaction = match result {
+        WordResult::Invalid => CommonReactions::RedX.val(),
+        WordResult::Blocked => CommonReactions::OctagonalSign.val(),
+        WordResult::Scored => CommonReactions::CheckmarkGreen.val(),
+        WordResult::ScoredBonus => CommonReactions::CheckmarkBlue.val(),
+      };
+      self.add_reaction(&message, &reaction).await;
+    }
+
+    if message.content.clone().starts_with(&self.prefix) {
       if message.guild_id.is_none() {
         self.send_message(message.channel_id, CommonMessages::NoDmCommands.val()).await;
         return;
@@ -37,8 +51,6 @@ impl DiscordBot {
         "start" => { self.start_game(message).await; }
         _ => {}
       }
-    } else if self.dm_to_guild.contains_key(&message.channel_id) {
-
     }
   }
 
@@ -83,14 +95,17 @@ impl DiscordBot {
       return;
     }
 
-    self.games.get_mut(&message.guild_id.unwrap()).unwrap().advance_rounds();
+    self.announce_game_start(message.channel_id, &message.guild_id.unwrap()).await;
 
-    let starting_game = self.games.get(&message.guild_id.unwrap()).unwrap();
-    self.send_message(message.channel_id, starting_game.get_starting_message()).await;
+    for player in self.games.get(&message.guild_id.unwrap()).unwrap().get_players() {
+      self.dm_to_guild.insert(*player, message.guild_id.unwrap());
+    }
 
-    self.dm_all_players(&message.guild_id.unwrap(), starting_game.get_dm_opening()).await;
+    println!("{:?}", self.dm_to_guild);
+
+    self.games.get_mut(&message.guild_id.unwrap()).unwrap().start_active_play();
+    self.dm_all_players(&message.guild_id.unwrap(), self.games.get(&message.guild_id.unwrap()).unwrap().get_round_announcement()).await;
   }
-
 
   async fn send_message(&self, channel: Id<ChannelMarker>, content: String) -> Message {
     self.client.create_message(channel).content(&content).unwrap().await.unwrap().model().await.unwrap()
@@ -112,6 +127,16 @@ impl DiscordBot {
 
       self.send_message(dm_channel.id, content.clone()).await;
     }
+  }
+
+  async fn announce_game_start(&mut self, channel: Id<ChannelMarker>, guild: &Id<GuildMarker>) {
+    self.games.get_mut(guild).unwrap().advance_rounds();
+
+    let starting_game = self.games.get(guild).unwrap();
+
+    self.send_message(channel, starting_game.get_starting_message()).await;
+    self.dm_all_players(guild, starting_game.get_dm_opening()).await;
+    sleep(Duration::from_millis(3000)).await;
   }
 }
 
@@ -138,12 +163,18 @@ impl CommonMessages {
 
 enum CommonReactions {
   CheckmarkGreen,
+  CheckmarkBlue,
+  OctagonalSign,
+  RedX,
 }
 
 impl CommonReactions {
   fn val(&self) -> RequestReactionType {
     let emoji = match *self {
-      Self::CheckmarkGreen => "✅"
+      Self::CheckmarkGreen => "✅",
+      Self::CheckmarkBlue => "☑️",
+      Self::OctagonalSign => "🛑",
+      Self::RedX => "❌",
     };
     RequestReactionType::Unicode { name: emoji }
   }

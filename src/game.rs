@@ -25,7 +25,7 @@ impl WordsAgainstStrangers {
       state: GameState::Starting,
       players: vec![wordsmith],
       header_message: None,
-      rounds: round::generate_rounds(3),
+      rounds: vec![],
       round_index: -1
     }
   }
@@ -36,6 +36,11 @@ impl WordsAgainstStrangers {
 
   pub fn advance_rounds(&mut self) {
     self.round_index += 1;
+
+    if self.round_index == 0 {
+      self.rounds = round::generate_rounds(&self.players, 3);
+    }
+
     self.state = GameState::BetweenRounds;
   }
   pub fn start_active_play(&mut self) {
@@ -72,14 +77,19 @@ impl WordsAgainstStrangers {
   pub fn get_starting_message(&self) -> String {
     String::from("**Words Against Friends**\nStarting now with players: ") +
       &self.players.iter().map(|x| format!("<@!{}>", x)).collect::<Vec<_>>().join(", ") +
-      ":warning: Go to your DMs to get ready to play!"
+      "\n:warning: Go to your DMs to get ready to play!"
   }
 
   pub fn get_dm_opening(&self) -> String {
     String::from("**Words Against Friends**\nGet ready to play! Game starting soon...")
   }
 
-  pub async fn receive_word(&mut self, player: Id<UserMarker>, word: String) -> round::WordResult {
-    self.get_current_round().receive_word(player, word).await
+  pub fn get_round_announcement(&self) -> String {
+    format!("**Words Against Friends: Round {} of {}**\nSend me words that: ", self.round_index+1, self.rounds.len()) +
+      &self.rounds.get(self.round_index as usize).unwrap().get_criteria_string()
+  }
+
+  pub fn receive_word(&mut self, player: Id<UserMarker>, word: String) -> round::WordResult {
+    self.get_current_round().receive_word(player, word)
   }
 }
