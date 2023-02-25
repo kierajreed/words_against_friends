@@ -63,7 +63,7 @@ impl Criteron for RhymesWith {
 }
 impl Criteron for PartOfSpeech {
   fn test(&self, word: String) -> bool {
-    words::get_part_of_speech(word) == self.part_of_speech
+    words::is_part_of_speech(word, &self.part_of_speech)
   }
   fn to_string(&self) -> String {
     format!("Is a `{}`", self.part_of_speech.to_string())
@@ -71,5 +71,7 @@ impl Criteron for PartOfSpeech {
 }
 
 pub fn generate_random_criteria() -> Vec<Box<dyn Criteron>> {
-  vec![Box::new(StartsWith { pattern: "te".to_string() })] // TODO
+  vec![Box::new(RhymesWith { word: "batter".to_owned() })]
+  // Box::new(PartOfSpeech { part_of_speech: words::PartsOfSpeech::Noun })
+  // Box::new(StartsWith { pattern: "te".to_string() })] // TODO
 }
