@@ -71,7 +71,8 @@ impl Criteron for PartOfSpeech {
 }
 
 pub fn generate_random_criteria() -> Vec<Box<dyn Criteron>> {
-  vec![Box::new(RhymesWith { word: "batter".to_owned() })]
+  vec![ Box::new(MinLength { length: 7 }) ]
+  // Box::new(RhymesWith { word: "batter".to_owned() })
   // Box::new(PartOfSpeech { part_of_speech: words::PartsOfSpeech::Noun })
-  // Box::new(StartsWith { pattern: "te".to_string() })] // TODO
+  // Box::new(StartsWith { pattern: "te".to_string() })
 }

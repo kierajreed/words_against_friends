@@ -10,6 +10,8 @@ mod words;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+  words::load_words();
+
   let prefix = String::from("w::");
   let token = env::var("DISCORD_TOKEN_WAF")?;
   let intents = Intents::GUILD_MESSAGES | Intents::DIRECT_MESSAGES | Intents::DIRECT_MESSAGE_REACTIONS | Intents::MESSAGE_CONTENT;

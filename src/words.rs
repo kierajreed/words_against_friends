@@ -1,6 +1,7 @@
-use std::process::Command;
-
+use std::{process::Command, fs::File, io::{BufReader, BufRead, self}};
 use ttaw;
+
+static mut WORDS: Vec<String> = vec![];
 
 #[derive(PartialEq)]
 pub enum PartsOfSpeech { Noun, Verb, Adverb, Adjective }
@@ -25,8 +26,19 @@ impl PartsOfSpeech {
   }
 }
 
+pub fn load_words() -> io::Result<()> {
+  let file = File::open("words_alpha.txt")?;
+  let reader = BufReader::new(file);
+
+  for line in reader.lines() {
+    unsafe { WORDS.push(line?); }
+  }
+
+  Ok(())
+}
+
 pub fn is_word(word: String) -> bool {
-  true // TODO
+  unsafe { WORDS.contains(&word) }
 }
 
 pub fn deserves_bonus(word: String) -> bool {
