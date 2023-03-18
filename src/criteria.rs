@@ -19,7 +19,7 @@ impl Criteron for StartsWith {
     word.starts_with(&self.pattern)
   }
   fn to_string(&self) -> String {
-      format!("Starts with `{}`", self.pattern)
+      format!("Start with `{}`", self.pattern)
   }
 }
 impl Criteron for EndsWith {
@@ -27,7 +27,7 @@ impl Criteron for EndsWith {
     word.ends_with(&self.pattern)
   }
   fn to_string(&self) -> String {
-    format!("Ends with `{}`", self.pattern)
+    format!("End with `{}`", self.pattern)
   }
 }
 impl Criteron for Contains {
@@ -35,7 +35,7 @@ impl Criteron for Contains {
     word.contains(&self.pattern)
   }
   fn to_string(&self) -> String {
-    format!("Contains `{}`", self.pattern)
+    format!("Contain `{}`", self.pattern)
   }
 }
 impl Criteron for OfLength {
@@ -43,7 +43,7 @@ impl Criteron for OfLength {
     word.len() == self.length
   }
   fn to_string(&self) -> String {
-    format!("Exactly `{}` letters long", self.length)
+    format!("Are exactly `{}` letters long", self.length)
   }
 }
 impl Criteron for MinLength {
@@ -51,7 +51,7 @@ impl Criteron for MinLength {
     word.len() >= self.length
   }
   fn to_string(&self) -> String {
-    format!("At least `{}` letters long", self.length)
+    format!("Are at least `{}` letters long", self.length)
   }
 }
 impl Criteron for RhymesWith {
@@ -59,7 +59,7 @@ impl Criteron for RhymesWith {
     words::is_rhyme(word, self.word.clone())
   }
   fn to_string(&self) -> String {
-    format!("Rhymes with \"`{}`\"", self.word)
+    format!("Rhyme with \"`{}`\"", self.word)
   }
 }
 impl Criteron for PartOfSpeech {
@@ -67,7 +67,7 @@ impl Criteron for PartOfSpeech {
     words::is_part_of_speech(word, &self.part_of_speech)
   }
   fn to_string(&self) -> String {
-    format!("Is a `{}`", self.part_of_speech.to_string())
+    format!("Are `{}`s", self.part_of_speech.to_string())
   }
 }
 
@@ -142,7 +142,7 @@ pub fn generate_random_criteria() -> Vec<Box<dyn Criteron>> {
   let num_criteria = num_criteria_dist.sample(&mut rng);
   let mut excluded: Vec<usize> = vec![];
 
-  for _ in 0..num_criteria {
+  for _ in 0..=num_criteria {
     criteria.push(generate_random_criteron(&mut excluded));
   }
 
