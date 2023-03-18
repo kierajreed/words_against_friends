@@ -2631,6 +2631,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "futures 0.3.26",
+ "rand 0.8.5",
  "tokio 1.25.0",
  "ttaw",
  "twilight-cache-inmemory",
