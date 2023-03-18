@@ -104,23 +104,32 @@ mod make_criteria {
 
 fn generate_random_criteron(exclude: &mut Vec<usize>) -> Box<dyn Criteron> {
   let mut rng = thread_rng();
-  let criteria_dist = WeightedIndex::new([50, 40, 20, 20, 30, 10, 10]).unwrap();
-  let mut selected = criteria_dist.sample(&mut rng);
 
-  while exclude.contains(&selected) {
-    selected = criteria_dist.sample(&mut rng);
-  }
-  exclude.push(selected);
+  if exclude.len() == 0 {
+    let criteria_dist = WeightedIndex::new([50, 40, 20]).unwrap();
 
-  match selected {
-    0 => make_criteria::starts_with(),
-    1 => make_criteria::ends_with(),
-    2 => make_criteria::contains(),
-    3 => make_criteria::of_length(),
-    4 => make_criteria::min_length(),
-    5 => make_criteria::rhymes_with(),
-    6 => make_criteria::part_of_speech(),
-    _ => panic!("at the disco")
+    match criteria_dist.sample(&mut rng) {
+      0 => make_criteria::starts_with(),
+      1 => make_criteria::ends_with(),
+      2 => make_criteria::contains(),
+      _ => panic!()
+    }
+  } else {
+    let criteria_dist = WeightedIndex::new([20, 30, 10, 10]).unwrap();
+    let mut selected = criteria_dist.sample(&mut rng);
+
+    while exclude.contains(&selected) {
+      selected = criteria_dist.sample(&mut rng);
+    }
+    exclude.push(selected);
+
+    match selected {
+      0 => make_criteria::of_length(),
+      1 => make_criteria::min_length(),
+      2 => make_criteria::rhymes_with(),
+      3 => make_criteria::part_of_speech(),
+      _ => panic!()
+    }
   }
 }
 
