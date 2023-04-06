@@ -9,6 +9,7 @@ pub struct DiscordBot {
   games: HashMap<Id<GuildMarker>, WordsAgainstStrangers>,
   dm_to_guild: HashMap<Id<UserMarker>, Id<GuildMarker>>,
   client: HttpClient,
+  token: String,
 }
 
 impl DiscordBot {
@@ -17,7 +18,8 @@ impl DiscordBot {
       prefix,
       games: HashMap::new(),
       dm_to_guild: HashMap::new(),
-      client: HttpClient::new(token),
+      client: HttpClient::new(token.clone()),
+      token,
     }
   }
 
@@ -25,14 +27,7 @@ impl DiscordBot {
     if self.dm_to_guild.contains_key(&message.author.id) && message.guild_id.is_none() {
       let guild_id = self.dm_to_guild.get(&message.author.id).unwrap();
       let relevant_game = self.games.get_mut(guild_id).unwrap();
-      let result = relevant_game.receive_word(message.author.id, message.content.clone());
-      let reaction = match result {
-        WordResult::Invalid => CommonReactions::RedX.val(),
-        WordResult::Blocked => CommonReactions::OctagonalSign.val(),
-        WordResult::Scored => CommonReactions::CheckmarkGreen.val(),
-        WordResult::ScoredBonus => CommonReactions::CheckmarkBlue.val(),
-      };
-      self.add_reaction(&message, &reaction).await;
+      relevant_game.receive_word(&message, message.content.clone()).await;
     }
 
     if message.content.clone().starts_with(&self.prefix) {
@@ -60,7 +55,7 @@ impl DiscordBot {
       return;
     }
 
-    let mut new_game = WordsAgainstStrangers::new(message.channel_id, message.author.id);
+    let mut new_game = WordsAgainstStrangers::new(message.channel_id, message.author.id, DiscordMinion::new(self.token.clone()));
     let intro = self.send_message(message.channel_id, new_game.make_intro()).await;
     new_game.set_header(intro.id);
     self.games.insert(message.guild_id.unwrap(), new_game);
@@ -140,12 +135,45 @@ impl DiscordBot {
   }
 }
 
+pub struct DiscordMinion {
+  client: HttpClient,
+}
+
+impl DiscordMinion {
+  fn new(token: String) -> Self {
+    Self {
+      client: HttpClient::new(token),
+    }
+  }
+
+  pub async fn send_message(&self, channel: Id<ChannelMarker>, content: String) -> Message {
+    self.client.create_message(channel).content(&content).unwrap().await.unwrap().model().await.unwrap()
+  }
+
+  pub async fn edit_message(&self, channel: Id<ChannelMarker>, message: Id<MessageMarker>, new_content: String) {
+    self.client.update_message(channel, message).content(Some(&new_content)).unwrap().await.unwrap();
+  }
+
+  pub async fn add_reaction(&self, message: &Message, reaction: CommonReactions) -> Response<EmptyBody> {
+    self.client.create_reaction(message.channel_id, message.id, &reaction.val()).await.unwrap()
+  }
+
+  pub async fn dm_all(&self, users: &Vec<Id<UserMarker>>, content: String) {
+    for user_id in users {
+      let dm_channel = self.client.create_private_channel(*user_id).await.unwrap().model().await.unwrap();
+
+      self.send_message(dm_channel.id, content.clone()).await;
+    }
+  }
+}
+
 enum CommonMessages {
   NoDmCommands,
   ExistingGame,
   NoExistingGame,
   GameInProgress,
   NoPermission,
+  AlreadyInGame,
 }
 
 impl CommonMessages {
@@ -156,12 +184,13 @@ impl CommonMessages {
       Self::NoExistingGame => "There is no game in this server yet!",
       Self::GameInProgress => "This game is in progress, you cannot do that!",
       Self::NoPermission => "Only the player who created the game may start it!",
+      Self::AlreadyInGame => "You may only join a game in one server at a time!",
     };
     message.to_string()
   }
 }
 
-enum CommonReactions {
+pub enum CommonReactions {
   CheckmarkGreen,
   CheckmarkBlue,
   OctagonalSign,

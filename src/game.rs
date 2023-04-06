@@ -1,6 +1,6 @@
-use twilight_model::id::{marker::{ChannelMarker, UserMarker, MessageMarker}, Id};
+use twilight_model::{id::{marker::{ChannelMarker, UserMarker, MessageMarker}, Id}, channel::Message};
 
-use crate::round;
+use crate::{round::{self, WordResult, Round}, discord::{CommonReactions, DiscordMinion}};
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum GameState {
@@ -14,19 +14,21 @@ pub struct WordsAgainstStrangers {
   state: GameState,
   players: Vec<Id<UserMarker>>,
   header_message: Option<Id<MessageMarker>>,
-  rounds: Vec<round::Round>,
+  rounds: Vec<Round>,
   round_index: i32,
+  minion: DiscordMinion,
 }
 
 impl WordsAgainstStrangers {
-  pub fn new(public_channel: Id<ChannelMarker>, wordsmith: Id<UserMarker>) -> Self {
+  pub fn new(public_channel: Id<ChannelMarker>, wordsmith: Id<UserMarker>, minion: DiscordMinion) -> Self {
     Self {
       public_channel,
       state: GameState::Starting,
       players: vec![wordsmith],
       header_message: None,
       rounds: vec![],
-      round_index: -1
+      round_index: -1,
+      minion,
     }
   }
 
@@ -65,7 +67,7 @@ impl WordsAgainstStrangers {
     self.players.push(player);
   }
 
-  fn get_current_round(&mut self) -> &mut round::Round {
+  fn get_current_round(&mut self) -> &mut Round {
     self.rounds.get_mut(self.round_index as usize).unwrap()
   }
 
@@ -89,7 +91,14 @@ impl WordsAgainstStrangers {
       &self.rounds.get(self.round_index as usize).unwrap().get_criteria_string()
   }
 
-  pub fn receive_word(&mut self, player: Id<UserMarker>, word: String) -> round::WordResult {
-    self.get_current_round().receive_word(player, word)
+  pub async fn receive_word(&mut self, message: &Message, word: String) {
+    let result = self.get_current_round().receive_word(message.author.id, word);
+    let reaction = match result {
+      WordResult::Invalid => CommonReactions::RedX,
+      WordResult::Blocked => CommonReactions::OctagonalSign,
+      WordResult::Scored => CommonReactions::CheckmarkGreen,
+      WordResult::ScoredBonus => CommonReactions::CheckmarkBlue,
+    };
+    self.minion.add_reaction(message, reaction).await;
   }
 }
