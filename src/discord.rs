@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 use twilight_model::{channel::Message, id::{marker::{ChannelMarker, GuildMarker, MessageMarker, UserMarker}, Id}};
 use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType, Response, response::marker::EmptyBody};
-use crate::{game::{WordsAgainstStrangers, GameState}, round::WordResult};
+use crate::game::{WordsAgainstStrangers, GameState};
 
 pub struct DiscordBot {
   prefix: String,
   games: HashMap<Id<GuildMarker>, WordsAgainstStrangers>,
   dm_to_guild: HashMap<Id<UserMarker>, Id<GuildMarker>>,
-  client: HttpClient,
+  minion: DiscordMinion,
   token: String,
 }
 
@@ -18,7 +18,7 @@ impl DiscordBot {
       prefix,
       games: HashMap::new(),
       dm_to_guild: HashMap::new(),
-      client: HttpClient::new(token.clone()),
+      minion: DiscordMinion::new(token.clone()),
       token,
     }
   }
@@ -32,7 +32,7 @@ impl DiscordBot {
 
     if message.content.clone().starts_with(&self.prefix) {
       if message.guild_id.is_none() {
-        self.send_message(message.channel_id, CommonMessages::NoDmCommands.val()).await;
+        self.minion.send_message(message.channel_id, CommonMessages::NoDmCommands.val()).await;
         return;
       }
 
@@ -51,42 +51,47 @@ impl DiscordBot {
 
   async fn new_game(&mut self, message: Message) {
     if self.games.contains_key(&message.guild_id.unwrap()) {
-      self.send_message(message.channel_id, CommonMessages::ExistingGame.val()).await;
+      self.minion.send_message(message.channel_id, CommonMessages::ExistingGame.val()).await;
       return;
     }
 
     let mut new_game = WordsAgainstStrangers::new(message.channel_id, message.author.id, DiscordMinion::new(self.token.clone()));
-    let intro = self.send_message(message.channel_id, new_game.make_intro()).await;
+    let intro = self.minion.send_message(message.channel_id, new_game.make_intro()).await;
     new_game.set_header(intro.id);
     self.games.insert(message.guild_id.unwrap(), new_game);
   }
   async fn join_game(&mut self, message: Message) {
     if !self.games.contains_key(&message.guild_id.unwrap()) {
-      self.send_message(message.channel_id, CommonMessages::NoExistingGame.val()).await;
+      self.minion.send_message(message.channel_id, CommonMessages::NoExistingGame.val()).await;
       return;
     }
     if self.games.get(&message.guild_id.unwrap()).unwrap().get_state() != GameState::Starting {
-      self.send_message(message.channel_id, CommonMessages::GameInProgress.val()).await;
+      self.minion.send_message(message.channel_id, CommonMessages::GameInProgress.val()).await;
       return;
     }
 
     self.games.get_mut(&message.guild_id.unwrap()).unwrap().add_player(message.author.id);
 
     let joining_game = self.games.get(&message.guild_id.unwrap()).unwrap();
-    self.edit_message(joining_game.get_active_channel(), joining_game.get_header(), joining_game.make_intro()).await;
-    self.add_reaction(&message, &CommonReactions::CheckmarkGreen.val()).await;
+    self.minion.edit_message(joining_game.get_active_channel(), joining_game.get_header(), joining_game.make_intro()).await;
+    self.minion.add_reaction(&message, CommonReactions::CheckmarkGreen).await;
   }
   async fn start_game(&mut self, message: Message) {
     if !self.games.contains_key(&message.guild_id.unwrap()) {
-      self.send_message(message.channel_id, CommonMessages::NoExistingGame.val()).await;
+      self.minion.send_message(message.channel_id, CommonMessages::NoExistingGame.val()).await;
       return;
     }
+    if self.dm_to_guild.contains_key(&message.author.id) {
+      self.minion.send_message(message.channel_id, CommonMessages::AlreadyInGame.val()).await;
+      return;
+    }
+
     if self.games.get(&message.guild_id.unwrap()).unwrap().get_state() != GameState::Starting {
-      self.send_message(message.channel_id, CommonMessages::GameInProgress.val()).await;
+      self.minion.send_message(message.channel_id, CommonMessages::GameInProgress.val()).await;
       return;
     }
-    if *self.games.get(&message.guild_id.unwrap()).unwrap().get_players().get(0).unwrap() != message.author.id {
-      self.send_message(message.channel_id, CommonMessages::NoPermission.val()).await;
+    if self.games.get(&message.guild_id.unwrap()).unwrap().get_players().get(0).unwrap() != &message.author.id {
+      self.minion.send_message(message.channel_id, CommonMessages::NoPermission.val()).await;
       return;
     }
 
@@ -96,32 +101,8 @@ impl DiscordBot {
       self.dm_to_guild.insert(*player, message.guild_id.unwrap());
     }
 
-    println!("{:?}", self.dm_to_guild);
-
     self.games.get_mut(&message.guild_id.unwrap()).unwrap().start_active_play();
-    self.dm_all_players(&message.guild_id.unwrap(), self.games.get(&message.guild_id.unwrap()).unwrap().get_round_announcement()).await;
-  }
-
-  async fn send_message(&self, channel: Id<ChannelMarker>, content: String) -> Message {
-    self.client.create_message(channel).content(&content).unwrap().await.unwrap().model().await.unwrap()
-  }
-
-  async fn edit_message(&self, channel: Id<ChannelMarker>, message: Id<MessageMarker>, content: String) {
-    self.client.update_message(channel, message).content(Some(&content)).unwrap().await.unwrap();
-  }
-
-  async fn add_reaction(&self, message: &Message, reaction: &RequestReactionType<'_>) -> Response<EmptyBody> {
-    self.client.create_reaction(message.channel_id, message.id, reaction).await.unwrap()
-  }
-
-  async fn dm_all_players(&self, game_server: &Id<GuildMarker>, content: String) {
-    let players = self.games.get(&game_server).unwrap().get_players();
-
-    for player_id in players {
-      let dm_channel = self.client.create_private_channel(*player_id).await.unwrap().model().await.unwrap();
-
-      self.send_message(dm_channel.id, content.clone()).await;
-    }
+    self.minion.dm_all(self.games.get(&message.guild_id.unwrap()).unwrap().get_players(), self.games.get(&message.guild_id.unwrap()).unwrap().get_round_announcement()).await;
   }
 
   async fn announce_game_start(&mut self, channel: Id<ChannelMarker>, guild: &Id<GuildMarker>) {
@@ -129,8 +110,8 @@ impl DiscordBot {
 
     let starting_game = self.games.get(guild).unwrap();
 
-    self.send_message(channel, starting_game.get_starting_message()).await;
-    self.dm_all_players(guild, starting_game.get_dm_opening()).await;
+    self.minion.send_message(channel, starting_game.get_starting_message()).await;
+    self.minion.dm_all(self.games.get(guild).unwrap().get_players(), starting_game.get_dm_opening()).await;
     sleep(Duration::from_millis(3000)).await;
   }
 }
