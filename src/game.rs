@@ -1,3 +1,4 @@
+use tokio::time::{sleep, Duration};
 use twilight_model::{id::{marker::{ChannelMarker, UserMarker, MessageMarker}, Id}, channel::Message};
 
 use crate::{round::{self, WordResult, Round}, discord::{CommonReactions, DiscordMinion}};
@@ -20,8 +21,8 @@ pub struct WordsAgainstStrangers {
 }
 
 impl WordsAgainstStrangers {
-  pub fn new(public_channel: Id<ChannelMarker>, wordsmith: Id<UserMarker>, minion: DiscordMinion) -> Self {
-    Self {
+  pub async fn new(public_channel: Id<ChannelMarker>, wordsmith: Id<UserMarker>, minion: DiscordMinion) -> Self {
+    let mut new_game = Self {
       public_channel,
       state: GameState::Starting,
       players: vec![wordsmith],
@@ -29,14 +30,25 @@ impl WordsAgainstStrangers {
       rounds: vec![],
       round_index: -1,
       minion,
-    }
+    };
+    let intro = new_game.minion.send_message(public_channel, new_game.make_intro()).await;
+    new_game.header_message = Some(intro.id);
+
+    new_game
   }
 
-  pub fn get_state(&self) -> GameState {
-    self.state
+  pub async fn start(&mut self) {
+    self.advance_rounds();
+    self.minion.send_message(self.public_channel, self.get_starting_message()).await;
+    self.minion.dm_all(self.get_players(), self.get_dm_opening()).await;
+    sleep(Duration::from_millis(3000)).await;
+
+    self.state = GameState::ActivePlay;
+
+    self.minion.dm_all(self.get_players(), self.get_round_announcement()).await;
   }
 
-  pub fn advance_rounds(&mut self) {
+  fn advance_rounds(&mut self) {
     self.round_index += 1;
 
     if self.round_index == 0 {
@@ -45,50 +57,11 @@ impl WordsAgainstStrangers {
 
     self.state = GameState::BetweenRounds;
   }
-  pub fn start_active_play(&mut self) {
-    self.state = GameState::ActivePlay;
-  }
 
-  pub fn get_active_channel(&self) -> Id<ChannelMarker> {
-    self.public_channel
-  }
-
-  pub fn set_header(&mut self, header: Id<MessageMarker>) {
-    self.header_message = Some(header);
-  }
-  pub fn get_header(&self) -> Id<MessageMarker> {
-    self.header_message.unwrap()
-  }
-
-  pub fn get_players(&self) -> &Vec<Id<UserMarker>> {
-    &self.players
-  }
-  pub fn add_player(&mut self, player: Id<UserMarker>) {
+  pub async fn add_player(&mut self, player: Id<UserMarker>) {
     self.players.push(player);
-  }
 
-  fn get_current_round(&mut self) -> &mut Round {
-    self.rounds.get_mut(self.round_index as usize).unwrap()
-  }
-
-  pub fn make_intro(&self) -> String {
-    String::from("**Words Against Friends**\nPlayers: ") +
-      &self.players.iter().map(|x| format!("<@!{}>", x)).collect::<Vec<_>>().join(", ")
-  }
-
-  pub fn get_starting_message(&self) -> String {
-    String::from("**Words Against Friends**\nStarting now with players: ") +
-      &self.players.iter().map(|x| format!("<@!{}>", x)).collect::<Vec<_>>().join(", ") +
-      "\n:warning: Go to your DMs to get ready to play!"
-  }
-
-  pub fn get_dm_opening(&self) -> String {
-    String::from("**Words Against Friends**\nGet ready to play! Game starting soon...")
-  }
-
-  pub fn get_round_announcement(&self) -> String {
-    format!("**Words Against Friends: Round {} of {}**\nSend me words that: ", self.round_index+1, self.rounds.len()) +
-      &self.rounds.get(self.round_index as usize).unwrap().get_criteria_string()
+    self.minion.edit_message(self.public_channel, self.header_message.unwrap(), self.make_intro()).await;
   }
 
   pub async fn receive_word(&mut self, message: &Message, word: String) {
@@ -100,5 +73,37 @@ impl WordsAgainstStrangers {
       WordResult::ScoredBonus => CommonReactions::CheckmarkBlue,
     };
     self.minion.add_reaction(message, reaction).await;
+  }
+
+  pub fn get_state(&self) -> GameState {
+    self.state
+  }
+
+  pub fn get_players(&self) -> &Vec<Id<UserMarker>> {
+    &self.players
+  }
+
+  fn get_current_round(&mut self) -> &mut Round {
+    self.rounds.get_mut(self.round_index as usize).unwrap()
+  }
+
+  fn make_intro(&self) -> String {
+    String::from("**Words Against Friends**\nPlayers: ") +
+      &self.players.iter().map(|x| format!("<@!{}>", x)).collect::<Vec<_>>().join(", ")
+  }
+
+  fn get_starting_message(&self) -> String {
+    String::from("**Words Against Friends**\nStarting now with players: ") +
+      &self.players.iter().map(|x| format!("<@!{}>", x)).collect::<Vec<_>>().join(", ") +
+      "\n:warning: Go to your DMs to get ready to play!"
+  }
+
+  fn get_dm_opening(&self) -> String {
+    String::from("**Words Against Friends**\nGet ready to play! Game starting soon...")
+  }
+
+  fn get_round_announcement(&self) -> String {
+    format!("**Words Against Friends: Round {} of {}**\nSend me words that: ", self.round_index+1, self.rounds.len()) +
+      &self.rounds.get(self.round_index as usize).unwrap().get_criteria_string()
   }
 }
