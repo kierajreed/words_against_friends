@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use twilight_model::id::{marker::UserMarker, Id};
 
@@ -10,7 +11,7 @@ pub struct Round {
   updated_scores: HashMap<Id<UserMarker>, u32>,
   scored_words: HashMap<Id<UserMarker>, Vec<String>>,
   use_count: HashMap<String, u32>,
-  criteria: Vec<Box<dyn criteria::Criteron>>,
+  criteria: Vec<Arc<dyn criteria::Criteron>>,
   num_players: u32,
 }
 

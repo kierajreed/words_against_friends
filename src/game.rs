@@ -3,6 +3,9 @@ use twilight_model::{id::{marker::{ChannelMarker, UserMarker, MessageMarker}, Id
 
 use crate::{round::{self, WordResult, Round}, discord::{CommonReactions, DiscordMinion}};
 
+const NUM_ROUNDS: u32 = 3;
+const ROUND_DURATION: u64 = 15;
+
 #[derive(PartialEq, Clone, Copy)]
 pub enum GameState {
   Starting,
@@ -28,7 +31,7 @@ impl WordsAgainstStrangers {
       players: vec![wordsmith],
       header_message: None,
       rounds: vec![],
-      round_index: -1,
+      round_index: 0,
       minion,
     };
     let intro = new_game.minion.send_message(public_channel, new_game.make_intro()).await;
@@ -38,24 +41,25 @@ impl WordsAgainstStrangers {
   }
 
   pub async fn start(&mut self) {
-    self.advance_rounds();
+    self.state = GameState::BetweenRounds;
+    self.rounds = round::generate_rounds(&self.players, NUM_ROUNDS);
     self.minion.send_message(self.public_channel, self.get_starting_message()).await;
     self.minion.dm_all(self.get_players(), self.get_dm_opening()).await;
     sleep(Duration::from_millis(3000)).await;
 
-    self.state = GameState::ActivePlay;
+    for _ in 0..self.rounds.len() {
+      self.state = GameState::ActivePlay;
+      self.minion.dm_all(self.get_players(), self.get_round_announcement()).await;
 
-    self.minion.dm_all(self.get_players(), self.get_round_announcement()).await;
-  }
-
-  fn advance_rounds(&mut self) {
-    self.round_index += 1;
-
-    if self.round_index == 0 {
-      self.rounds = round::generate_rounds(&self.players, 3);
+      sleep(Duration::from_secs(ROUND_DURATION)).await;
+      self.state = GameState::BetweenRounds;
+      self.round_index += 1;
+      // announce scores
+      // do it all again
     }
 
-    self.state = GameState::BetweenRounds;
+    // announce game end
+    // announce scores
   }
 
   pub async fn add_player(&mut self, player: Id<UserMarker>) {

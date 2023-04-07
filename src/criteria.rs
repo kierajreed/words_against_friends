@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use crate::words;
-use rand::{Rng, thread_rng, distributions::WeightedIndex, prelude::Distribution};
+use rand::{thread_rng, distributions::WeightedIndex, prelude::Distribution};
 
 pub trait Criteron {
   fn test(&self, word: String) -> bool;
@@ -72,37 +74,39 @@ impl Criteron for PartOfSpeech {
 }
 
 mod make_criteria {
-  use super::*;
+  use std::sync::Arc;
+
+use super::*;
   use rand::{Rng, thread_rng};
 
-  pub fn starts_with() -> Box<StartsWith> { // TODO: don't hard code lol
-    Box::new(StartsWith { pattern: "te".to_owned() })
+  pub fn starts_with() -> Arc<StartsWith> { // TODO: don't hard code lol
+    Arc::new(StartsWith { pattern: "te".to_owned() })
   }
-  pub fn ends_with() -> Box<EndsWith> { // TODO: don't hard code lol
-    Box::new(EndsWith { pattern: "ge".to_owned() })
+  pub fn ends_with() -> Arc<EndsWith> { // TODO: don't hard code lol
+    Arc::new(EndsWith { pattern: "ge".to_owned() })
   }
-  pub fn contains() -> Box<Contains> { // TODO: don't hard code lol
-    Box::new(Contains { pattern: "on".to_owned() })
+  pub fn contains() -> Arc<Contains> { // TODO: don't hard code lol
+    Arc::new(Contains { pattern: "on".to_owned() })
   }
-  pub fn of_length() -> Box<OfLength> {
+  pub fn of_length() -> Arc<OfLength> {
     let mut rng = thread_rng();
     let length: usize = rng.gen_range(6..=10);
-    Box::new(OfLength { length })
+    Arc::new(OfLength { length })
   }
-  pub fn min_length() -> Box<MinLength> {
+  pub fn min_length() -> Arc<MinLength> {
     let mut rng = thread_rng();
     let length: usize = rng.gen_range(8..=11);
-    Box::new(MinLength { length })
+    Arc::new(MinLength { length })
   }
-  pub fn rhymes_with() -> Box<RhymesWith> { // TODO: don't hard code lol
-    Box::new(RhymesWith { word: "finally".to_owned() })
+  pub fn rhymes_with() -> Arc<RhymesWith> { // TODO: don't hard code lol
+    Arc::new(RhymesWith { word: "finally".to_owned() })
   }
-  pub fn part_of_speech() -> Box<PartOfSpeech> { // TODO: don't hard code lol
-    Box::new(PartOfSpeech { part_of_speech: words::PartsOfSpeech::Noun })
+  pub fn part_of_speech() -> Arc<PartOfSpeech> { // TODO: don't hard code lol
+    Arc::new(PartOfSpeech { part_of_speech: words::PartsOfSpeech::Noun })
   }
 }
 
-fn generate_random_criteron(exclude: &mut Vec<usize>) -> Box<dyn Criteron> {
+fn generate_random_criteron(exclude: &mut Vec<usize>) -> Arc<dyn Criteron> {
   let mut rng = thread_rng();
 
   if exclude.len() == 0 {
@@ -133,8 +137,8 @@ fn generate_random_criteron(exclude: &mut Vec<usize>) -> Box<dyn Criteron> {
   }
 }
 
-pub fn generate_random_criteria() -> Vec<Box<dyn Criteron>> {
-  let mut criteria: Vec<Box<dyn Criteron>> = vec![];
+pub fn generate_random_criteria() -> Vec<Arc<dyn Criteron>> {
+  let mut criteria: Vec<Arc<dyn Criteron>> = vec![];
 
   let mut rng = thread_rng();
 
