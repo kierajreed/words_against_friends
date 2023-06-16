@@ -3,7 +3,7 @@ use ttaw;
 
 static mut WORDS: Vec<String> = vec![];
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum PartsOfSpeech { Noun, Verb, Adverb, Adjective }
 
 impl PartsOfSpeech {

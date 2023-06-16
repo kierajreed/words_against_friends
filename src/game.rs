@@ -48,6 +48,7 @@ impl WordsAgainstStrangers {
     sleep(Duration::from_millis(3000)).await;
 
     for _ in 0..self.rounds.len() {
+      println!("Round {}", self.round_index);
       self.state = GameState::ActivePlay;
       self.minion.dm_all(self.get_players(), self.get_round_announcement()).await;
 
@@ -69,6 +70,8 @@ impl WordsAgainstStrangers {
   }
 
   pub async fn receive_word(&mut self, message: &Message, word: String) {
+    if self.state != GameState::ActivePlay { return };
+
     let result = self.get_current_round().receive_word(message.author.id, word);
     let reaction = match result {
       WordResult::Invalid => CommonReactions::RedX,

@@ -1,11 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Mutex;
 use twilight_model::{channel::Message, id::{marker::{ChannelMarker, GuildMarker, MessageMarker, UserMarker}, Id}};
 use twilight_http::{Client as HttpClient, request::channel::reaction::RequestReactionType, Response, response::marker::EmptyBody};
 use crate::game::{WordsAgainstStrangers, GameState};
 
 pub struct DiscordBot {
   prefix: String,
-  games: HashMap<Id<GuildMarker>, WordsAgainstStrangers>,
+  games: HashMap<Id<GuildMarker>, Arc<Mutex<WordsAgainstStrangers>>>,
   dm_to_guild: HashMap<Id<UserMarker>, Id<GuildMarker>>,
   minion: DiscordMinion,
   token: String,
@@ -24,8 +25,10 @@ impl DiscordBot {
 
   pub async fn handle_message(&mut self, message: Message) {
     if self.dm_to_guild.contains_key(&message.author.id) && message.guild_id.is_none() {
+      println!("got word '{}'", message.content);
       let guild_id = self.dm_to_guild.get(&message.author.id).unwrap();
-      let relevant_game = self.games.get_mut(guild_id).unwrap();
+      println!("guild {}", guild_id);
+      let mut relevant_game = self.games.get_mut(guild_id).unwrap().lock().await;
       relevant_game.receive_word(&message, message.content.clone()).await;
     }
 
@@ -63,14 +66,15 @@ impl DiscordBot {
       message.author.id,
       DiscordMinion::new(self.token.clone())
     ).await;
-    self.games.insert(message.guild_id.unwrap(), new_game);
+    self.games.insert(message.guild_id.unwrap(), Arc::new(Mutex::new(new_game)));
   }
   async fn join_game(&mut self, message: Message) {
     if !self.games.contains_key(&message.guild_id.unwrap()) {
       self.minion.send_message(message.channel_id, CommonMessages::NoExistingGame.val()).await;
       return;
     }
-    if self.games.get(&message.guild_id.unwrap()).unwrap().get_state() != GameState::Starting {
+
+    if self.get_game(&message).await.get_state() != GameState::Starting {
       self.minion.send_message(message.channel_id, CommonMessages::GameInProgress.val()).await;
       return;
     }
@@ -79,7 +83,7 @@ impl DiscordBot {
       return;
     }
 
-    self.games.get_mut(&message.guild_id.unwrap()).unwrap().add_player(message.author.id).await;
+    self.get_game(&message).await.add_player(message.author.id).await;
     self.minion.add_reaction(&message, CommonReactions::CheckmarkGreen).await;
   }
   async fn start_game(&mut self, message: Message) {
@@ -87,20 +91,30 @@ impl DiscordBot {
       self.minion.send_message(message.channel_id, CommonMessages::NoExistingGame.val()).await;
       return;
     }
-    if self.games.get(&message.guild_id.unwrap()).unwrap().get_state() != GameState::Starting {
+    if self.get_game(&message).await.get_state() != GameState::Starting {
       self.minion.send_message(message.channel_id, CommonMessages::GameInProgress.val()).await;
       return;
     }
-    if self.games.get(&message.guild_id.unwrap()).unwrap().get_players().get(0).unwrap() != &message.author.id {
+    if self.get_game(&message).await.get_players().get(0).unwrap() != &message.author.id {
       self.minion.send_message(message.channel_id, CommonMessages::NoPermission.val()).await;
       return;
     }
 
-    for player in self.games.get(&message.guild_id.unwrap()).unwrap().get_players() {
-      self.dm_to_guild.insert(*player, message.guild_id.unwrap());
+    let players = self.get_game(&message).await.get_players().clone();
+    for player in players {
+      self.dm_to_guild.insert(player, message.guild_id.unwrap());
     }
+    println!("started starting game! {:?}", self.dm_to_guild);
 
-    self.games.get_mut(&message.guild_id.unwrap()).unwrap().start().await;
+    let game = self.games.get(&message.guild_id.unwrap()).unwrap().clone();
+    tokio::task::spawn(async move {
+      game.lock().await.start().await;
+    });
+    println!("finished starting game!");
+  }
+
+  async fn get_game(&self, message: &Message) -> tokio::sync::MutexGuard<'_, WordsAgainstStrangers, > {
+    self.games.get(&message.guild_id.unwrap()).unwrap().lock().await
   }
 }
 

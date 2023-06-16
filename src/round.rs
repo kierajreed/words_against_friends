@@ -11,7 +11,7 @@ pub struct Round {
   updated_scores: HashMap<Id<UserMarker>, u32>,
   scored_words: HashMap<Id<UserMarker>, Vec<String>>,
   use_count: HashMap<String, u32>,
-  criteria: Vec<Arc<dyn criteria::Criteron>>,
+  criteria: Vec<criteria::Criteron>,
   num_players: u32,
 }
 

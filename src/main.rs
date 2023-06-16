@@ -10,7 +10,7 @@ mod words;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-  words::load_words();
+  words::load_words().unwrap();
 
   let prefix = String::from("w::");
   let token = env::var("DISCORD_TOKEN_WAF")?;
